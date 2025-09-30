@@ -33,8 +33,8 @@ jobs:
       - name: Build & Push image
         uses: docker/build-push-action@v5
         with:
-          context: ./Backend
-          file: ./Backend/Dockerfile
+          context: ./Backend            # (đổi nếu Dockerfile ở nơi khác)
+          file: ./Backend/Dockerfile    # (đổi nếu tên/đường dẫn khác)
           push: true
           tags: |
             ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
@@ -46,7 +46,7 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy to VPS
+      - name: Deploy to VPS (sync repo & restart services)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -54,10 +54,65 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           envs: DH_USER,DH_TOKEN,GH_DEPLOY_KEY,REPO_SSH,APP_DIR
           script: |
-            bash -x .github/scripts/deploy.sh
+            set -euo pipefail
+
+            # ---------- cấu hình ----------
+            REPO_SSH="${REPO_SSH:-git@github.com:LongIT2007/coffeeshop.git}"
+            APP_DIR="${APP_DIR:-$HOME/coffeeshop}"
+
+            # ---------- chuẩn bị SSH để pull repo qua SSH ----------
+            mkdir -p ~/.ssh
+            chmod 700 ~/.ssh
+            # Ghi private deploy key từ secret vào file
+            if [ -n "${GH_DEPLOY_KEY:-}" ]; then
+              echo "${GH_DEPLOY_KEY}" > ~/.ssh/id_ed25519
+              chmod 600 ~/.ssh/id_ed25519
+              cat > ~/.ssh/config <<'EOF'
+              Host github.com
+                HostName github.com
+                User git
+                IdentityFile ~/.ssh/id_ed25519
+                IdentitiesOnly yes
+              EOF
+              chmod 600 ~/.ssh/config
+              # Thêm known_hosts để khỏi hỏi interactive
+              ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null || true
+              chmod 644 ~/.ssh/known_hosts
+            fi
+
+            # ---------- sync code ----------
+            if [ ! -d "$APP_DIR/.git" ]; then
+              mkdir -p "$(dirname "$APP_DIR")"
+              cd "$(dirname "$APP_DIR")"
+              git clone "$REPO_SSH" "$(basename "$APP_DIR")"
+              cd "$APP_DIR"
+            else
+              cd "$APP_DIR"
+            fi
+
+            # reset về origin/main, giữ lại .env
+            git fetch --all --prune
+            git reset --hard origin/main
+            git clean -fd -e .env
+
+            # ---------- login Docker Hub (nếu có secret) ----------
+            if [ -n "${DH_USER:-}" ] && [ -n "${DH_TOKEN:-}" ]; then
+              echo "${DH_TOKEN}" | docker login -u "${DH_USER}" --password-stdin || true
+            fi
+
+            # ---------- deploy ----------
+            # Kéo image mới (nếu có)
+            docker compose pull || true
+            # Khởi động/ cập nhật container, không xoá file ngoài compose
+            docker compose up -d --pull always --remove-orphans
+            # Dọn image lạc mồ côi
+            docker image prune -f || true
+            # In trạng thái
+            docker compose ps
     env:
-      REPO_SSH: ${{ secrets.REPO_SSH }}
-      APP_DIR: ${{ secrets.APP_DIR }}
+      # Cho phép chỉnh qua repo secrets (tùy)
+      REPO_SSH: ${{ secrets.REPO_SSH }}   # nếu không set, dùng mặc định ở script
+      APP_DIR: ${{ secrets.APP_DIR }}     # ví dụ: /home/ubuntu/coffeeshop
       DH_USER: ${{ secrets.DH_USER }}
       DH_TOKEN: ${{ secrets.DH_TOKEN }}
       GH_DEPLOY_KEY: ${{ secrets.GH_DEPLOY_KEY }}
