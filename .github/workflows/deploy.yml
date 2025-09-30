@@ -2,7 +2,7 @@ name: Build & Deploy Coffeeshop BE
 
 on:
   push:
-    branches: ["main"]
+    branches: [ "main" ]
 
 concurrency:
   group: deploy-coffeeshop-be
@@ -14,6 +14,7 @@ jobs:
     env:
       IMAGE_NAME: ${{ secrets.DH_USER }}/coffeeshop-backend
       IMAGE_TAG: latest
+      SHORT_SHA: ${{ github.sha.substr(0,7) }}
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -36,9 +37,11 @@ jobs:
           context: ./Backend
           file: ./Backend/Dockerfile
           push: true
+          # gắn 3 tags: latest, full sha, short sha
           tags: |
             ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:${{ env.SHORT_SHA }}
           provenance: false
           sbom: false
 
@@ -46,7 +49,7 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy to VPS
+      - name: Deploy to VPS (sync repo & restart services)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -54,7 +57,57 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           envs: DH_USER,DH_TOKEN,GH_DEPLOY_KEY,REPO_SSH,APP_DIR
           script: |
-            bash -x .github/scripts/deploy.sh
+            set -euo pipefail
+
+            # ---------- cấu hình ----------
+            REPO_SSH="${REPO_SSH:-git@github.com:Trinh1112/deloy-website.git}"
+            APP_DIR="${APP_DIR:-$HOME/deloy-website}"
+
+            echo "[INFO] REPO_SSH=$REPO_SSH"
+            echo "[INFO] APP_DIR=$APP_DIR"
+
+            # ---------- chuẩn bị SSH để pull repo qua SSH ----------
+            mkdir -p ~/.ssh && chmod 700 ~/.ssh
+            if [ -n "${GH_DEPLOY_KEY:-}" ]; then
+              printf '%s\n' "$GH_DEPLOY_KEY" > ~/.ssh/id_ed25519
+              chmod 600 ~/.ssh/id_ed25519
+              cat > ~/.ssh/config <<'EOF'
+Host github.com
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/id_ed25519
+  IdentitiesOnly yes
+EOF
+              chmod 600 ~/.ssh/config
+              ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null || true
+              chmod 644 ~/.ssh/known_hosts
+            fi
+
+            # ---------- sync code ----------
+            if [ ! -d "$APP_DIR/.git" ]; then
+              mkdir -p "$(dirname "$APP_DIR")"
+              cd "$(dirname "$APP_DIR")"
+              git clone "$REPO_SSH" "$(basename "$APP_DIR")"
+              cd "$APP_DIR"
+            else
+              cd "$APP_DIR"
+            fi
+
+            git fetch --all --prune
+            git reset --hard origin/main
+            # giữ file .env nếu bạn đang đặt tại thư mục gốc project
+            git clean -fd -e .env
+
+            # ---------- login Docker Hub ----------
+            if [ -n "${DH_USER:-}" ] && [ -n "${DH_TOKEN:-}" ]; then
+              echo "${DH_TOKEN}" | docker login -u "${DH_USER}" --password-stdin || true
+            fi
+
+            # ---------- deploy ----------
+            docker compose pull || true
+            docker compose up -d --pull always --remove-orphans
+            docker image prune -f || true
+            docker compose ps
     env:
       REPO_SSH: ${{ secrets.REPO_SSH }}
       APP_DIR: ${{ secrets.APP_DIR }}
