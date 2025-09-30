@@ -1,0 +1,41 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mysql-db
+    environment:
+      MYSQL_DATABASE: coffeeshop
+      MYSQL_USER: tamxinh
+      MYSQL_PASSWORD: t@m1112!
+      MYSQL_ROOT_PASSWORD: rootpass
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+  backend:
+    build:
+      context: ./backend
+    container_name: backend
+    ports:
+      - "8099:8099"
+    volumes:
+      - ./data:/data
+    depends_on:
+      - mysql
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/coffeeshop?useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: tamxinh
+      SPRING_DATASOURCE_PASSWORD: t@m1112!
+      JWT_SECRET: 3fC9!$2fL8@B7wzQ9rT1eMxNpK#vH7yL
+      JWT_EXPIRATION: 86400000
+      JWT_REFRESH_EXPIRATION: 3600000
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: frontend
+    ports:
+      - "3000:3000"
+    stdin_open: true
+    tty: true
+
+volumes:
+  mysql-data:
