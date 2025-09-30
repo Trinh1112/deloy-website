@@ -14,7 +14,6 @@ jobs:
     env:
       IMAGE_NAME: ${{ secrets.DH_USER }}/coffeeshop-backend
       IMAGE_TAG: latest
-      SHORT_SHA: ${{ github.sha.substr(0,7) }}
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -37,11 +36,9 @@ jobs:
           context: ./Backend
           file: ./Backend/Dockerfile
           push: true
-          # gắn 3 tags: latest, full sha, short sha
           tags: |
             ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
-            ${{ env.IMAGE_NAME }}:${{ env.SHORT_SHA }}
           provenance: false
           sbom: false
 
@@ -62,9 +59,6 @@ jobs:
             # ---------- cấu hình ----------
             REPO_SSH="${REPO_SSH:-git@github.com:Trinh1112/deloy-website.git}"
             APP_DIR="${APP_DIR:-$HOME/deloy-website}"
-
-            echo "[INFO] REPO_SSH=$REPO_SSH"
-            echo "[INFO] APP_DIR=$APP_DIR"
 
             # ---------- chuẩn bị SSH để pull repo qua SSH ----------
             mkdir -p ~/.ssh && chmod 700 ~/.ssh
@@ -95,7 +89,6 @@ EOF
 
             git fetch --all --prune
             git reset --hard origin/main
-            # giữ file .env nếu bạn đang đặt tại thư mục gốc project
             git clean -fd -e .env
 
             # ---------- login Docker Hub ----------
