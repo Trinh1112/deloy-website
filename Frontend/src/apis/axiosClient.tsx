@@ -11,8 +11,8 @@ const axiosClient = axios.create({
   },
 });
 
-const getToken = () => localStorage.getItem('accessToken') || '';
-const getRefreshToken = () => localStorage.getItem('refreshToken') || '';
+const getToken = () => localStorage.getItem('accessToken') || "";
+const getRefreshToken = () => localStorage.getItem('refreshToken') || "";
 
 axiosClient.interceptors.request.use(async (config) => {
   const token = getToken();

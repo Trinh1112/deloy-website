@@ -16,7 +16,7 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public TokenResponse login(@RequestBody LoginRequest loginRequest) {//LoginRequest: đầu vào//đầu ra
+    public TokenResponse login(@RequestBody LoginRequest loginRequest) {
         return authService.login(loginRequest);
     }
 
