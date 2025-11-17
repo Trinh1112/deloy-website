@@ -57,7 +57,7 @@ jobs:
             set -euo pipefail
 
             REPO_SSH="${REPO_SSH:-git@github.com:Trinh1112/deloy-website.git}"
-            APP_DIR="${APP_DIR:-$HOME/deloy-website}"
+            APP_DIR="${APP_DIR:-$HOME/coffeeshop}"
 
             mkdir -p ~/.ssh && chmod 700 ~/.ssh
             if [ -n "${GH_DEPLOY_KEY:-}" ]; then

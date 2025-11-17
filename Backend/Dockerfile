@@ -1,13 +1,19 @@
 # Stage 1: Build the application
-FROM maven:3.8.5-openjdk-17 AS build
+FROM maven:3.8.5-eclipse-temurin-17 AS build
 WORKDIR /app
+
+# Giữ nguyên cấu trúc giống bạn
 COPY coffeeshop/pom.xml .
 COPY coffeeshop/src ./src
+
 RUN mvn clean package -DskipTests
 
+
 # Stage 2: Create the final image
-FROM openjdk:17-jdk-slim
+FROM eclipse-temurin:17-jdk
 WORKDIR /app
+
 COPY --from=build /app/target/*.jar app.jar
+
 EXPOSE 8089
 ENTRYPOINT ["java", "-jar", "app.jar"]
